@@ -63,9 +63,13 @@ def search():
     query = request.args.get('query')
     if query:
         movies = search_client.search_movies(title=query)
+        return render_template("search.html", movies=movies, query=query,is_discover=False)
     else:
-        movies = search_client.discover_movies()
-    return render_template("search.html", movies=movies, query=query)
+        page = request.args.get('page', 1, type=int)
+        movies = search_client.discover_movies(page=page)
+        next_page = page + 1
+        return render_template("search.html", movies=movies, query=None, is_discover=True, next_page=next_page)
+
 
 @app.route("/login", methods=["GET","POST"])
 def login():
@@ -98,7 +102,7 @@ def register():
         success = database.add_user(username, hashed_password)
         if not success:
             return render_template("register.html", error="Username already exists.")
-            
+
         user = database.get_user_by_username(username)
         session["user_id"] = user["id"]
         session["username"] = user["name"]

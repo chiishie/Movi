@@ -780,4 +780,28 @@ input.search-bar {
   .login-card a:hover {
     text-decoration: underline;
   }
+
+  .view-more-container{
+    text-align: center;
+    margin: 30px 0;
+  }
+
+  .view-more-btn{
+    display: inline-block; 
+    padding: 12px 30px;
+    border: 2px solid #ff3838; 
+    border-radius: 6px;
+    color: #ff3838; 
+    text-decoration: none; 
+    font-weight: 600;
+    font-size: 1rem;
+    transition: background-color 0.2s ease, color 0.2s ease; 
+  }
+
+  .view-more-btn:hover{
+    background-color: #ff3838;
+    color: #fff;
+  }
+
+
   
