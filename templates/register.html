@@ -1,18 +1,20 @@
 {% extends 'base.html' %}
 
-{% block title %}Login{% endblock %}
+{% block title %}Register{% endblock %}
 
 {% block body %}
   <div class="login-card">
-    <h2>Login</h2>
-    <form method="POST" action="{{ url_for('login') }}">
+    <h2>Create an Account</h2>
+    <form method="POST" action="{{ url_for('register') }}">
       <label for="username">Username</label>
       <input type="text" id="username" name="username" placeholder="Your username" required>
       <label for="password">Password</label>
       <input type="password" id="password" name="password" placeholder="Your password" required>
-      <button type="submit">Login</button>
+      <button type="submit">Register</button>
+      {% if error %}
+        <p class="error">{{ error }}</p>
+      {% endif %}
     </form>
-    <p>Don't have an account? <a href="{{ url_for('register') }}">Register here</a>.</p>
-    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    <p>Already have an account? <a href="{{ url_for('login') }}">Login here</a>.</p>
   </div>
-{% endblock %}
+{% endblock %} 

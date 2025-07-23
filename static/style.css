@@ -735,7 +735,8 @@ input.search-bar {
   }
   
   /* --- Input Field --- */
-  .login-card input[type="text"] {
+  .login-card input[type="text"],
+  .login-card input[type="password"] {
     width: 100%;
     padding: 0.6rem;
     font-size: 1rem;
@@ -770,4 +771,13 @@ input.search-bar {
     box-shadow: 0 4px 12px rgba(255, 56, 56, 0.3);
   }
   
+  /* --- Links and Errors --- */
+.login-card a {
+    color: #ff6b6b; 
+    text-decoration: none; 
+  }
+  
+  .login-card a:hover {
+    text-decoration: underline;
+  }
   

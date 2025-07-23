@@ -6,6 +6,7 @@ import os
 import requests
 import json
 import sqlite3
+from werkzeug.security import generate_password_hash, check_password_hash
 
 
 app = Flask(__name__)
@@ -25,6 +26,7 @@ def init_app():
 
     # Initialize the TMDB client with the API key from environment variables
     api_key = os.getenv("TMDB_API_KEY")
+    
     print(f"Loaded API key: '{api_key}'")
 
     search_client = TMDBClient(api_key=api_key)
@@ -69,9 +71,12 @@ def search():
 def login():
     if request.method == "POST":
         username = request.form['username']
-        if not username:
-            return "Username is required", 400
-        user = get_or_make_user(username)
+        password = request.form['password']
+        if not username or not password:
+            return render_template("login.html", error="Username and password are required.")
+        user = database.get_user_by_username(username)
+        if user is None or not check_password_hash(user['password'], password):
+            return render_template("login.html", error="Invalid username or password.")
         session["user_id"] = user['id']
         session["username"] = user['name']
         return redirect(url_for("search"))
@@ -81,6 +86,24 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for("search"))
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        username = request.form["username"]
+        password = request.form["password"]
+        if not username or not password:
+            return render_template("register.html", error="Username and password are required.")
+        hashed_password = generate_password_hash(password)
+        success = database.add_user(username, hashed_password)
+        if not success:
+            return render_template("register.html", error="Username already exists.")
+            
+        user = database.get_user_by_username(username)
+        session["user_id"] = user["id"]
+        session["username"] = user["name"]
+        return redirect(url_for("search"))
+    return render_template("register.html")
 
 @app.route("/my_movies.html")
 def my_movies():
