@@ -17,7 +17,8 @@ class MovieRankerDB:
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE
+            name TEXT UNIQUE,
+            password TEXT NOT NULL
         )
         """)
 
@@ -79,6 +80,28 @@ class MovieRankerDB:
         conn.commit()
         conn.close()
 
+    def add_user(self, username, password):
+        with self.db_connect() as conn:
+            try:
+                cursor = conn.cursor()
+                cursor.execute('INSERT INTO users (name, password) VALUES (?, ?)', (username, password))
+                conn.commit()
+                return True
+            except sqlite3.IntegrityError:
+                print(f"User {username} already exists")
+                return False
+
+
+    def get_user_by_username(self, username):
+        conn = self.db_connect()
+        with self.db_connect() as conn:
+            cursor = conn.cursor()
+            user = cursor.execute("SELECT * FROM users WHERE name = ?", (username,)).fetchone()
+            if user is None:
+                print(f"User {username} does not exist")
+                return None
+            else:
+                return user
     def add_user_movies_by_id(self, user_id, movie_id, rating):
         conn = self.db_connect()
         cursor = conn.cursor()
