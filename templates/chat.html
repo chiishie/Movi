@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+
+{% block title %}Movie Chatbot{% endblock %}
+
+{% block body %}
+  <div class="chat-container">
+    <h2>Movie Assistant Chatbot</h2>
+    <div id="chat-box" class="chat-box"></div>
+
+    <div class="chat-input-area">
+      <input type="text" id="user-input" placeholder="Ask me anything about movies..." autocomplete="off" />
+      <button id="send-btn">Send</button>
+    </div>
+  </div>
+
+  <script>
+    async function sendMessage() {
+      const inputEl = document.getElementById('user-input');
+      const input = inputEl.value.trim();
+      if (!input) return;
+      
+      const box = document.getElementById('chat-box');
+      box.innerHTML += `<p class="user-message"><strong>You:</strong> ${input}</p>`;
+      inputEl.value = '';
+      box.scrollTop = box.scrollHeight;
+
+      try {
+        const res = await fetch('/chat', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ message: input })
+        });
+        const data = await res.json();
+        box.innerHTML += `<p class="bot-message"><strong>Bot:</strong> ${data.response}</p>`;
+        box.scrollTop = box.scrollHeight;
+      } catch (error) {
+        box.innerHTML += `<p class="bot-message error"><strong>Bot:</strong> Sorry, something went wrong.</p>`;
+      }
+    }
+
+    document.getElementById('send-btn').addEventListener('click', sendMessage);
+    document.getElementById('user-input').addEventListener('keypress', e => {
+      if (e.key === 'Enter') sendMessage();
+    });
+  </script>
+{% endblock %}
