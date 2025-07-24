@@ -34,7 +34,8 @@ class MovieRankerDB:
             release_date TEXT,
             vote_average REAL,
             vote_count INTEGER,
-            popularity REAL
+            popularity REAL,
+            media_type TEXT NOT NULL
         )
         """)
 
@@ -63,22 +64,28 @@ class MovieRankerDB:
         conn.commit()
         conn.close()
 
-    def add_movie(self, movie_data):
+    def add_media(self, media_data):
         conn = self.db_connect()
         cursor = conn.cursor()
-        movie_data = dict(movie_data) 
-        self.add_genres(movie_data['id'], movie_data.get('genre_ids', []))
+        media_type = media_data.get('media_type', 'movie')
+        is_movie = media_type == 'movie'
+        title = media_data['title'] if is_movie else media_data['name']
+        release_date = media_data['release_date'] if is_movie else media_data['first_air_date']
+        
+        media_data = dict(media_data) 
+        self.add_genres(media_data['id'], media_data.get('genre_ids', []))
         cursor.execute("""
-        INSERT OR IGNORE INTO movies (id, backdrop_path, poster_path, original_language, title, overview, release_date, vote_average, vote_count, popularity)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR IGNORE INTO movies (id, backdrop_path, poster_path, original_language, title, overview, release_date, vote_average, vote_count, popularity, media_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            movie_data['id'], movie_data.get('backdrop_path'),
-            movie_data.get('poster_path'), movie_data['original_language'], movie_data['title'],
-            movie_data.get('overview'), movie_data.get('release_date'), movie_data.get('vote_average', 0),
-            movie_data.get('vote_count', 0), movie_data.get('popularity', 0)
+            media_data['id'], media_data.get('backdrop_path'),
+            media_data.get('poster_path'), media_data['original_language'], title,
+            media_data.get('overview'), release_date, media_data.get('vote_average', 0),
+            media_data.get('vote_count', 0), media_data.get('popularity', 0), media_type
         ))
         conn.commit()
         conn.close()
+
 
     def add_user(self, username, password):
         with self.db_connect() as conn:
@@ -217,6 +224,15 @@ class MovieRankerDB:
         cursor.execute("DELETE FROM movies WHERE id = ?", (movie_id,))
         conn.commit()
         conn.close()
+
+    def get_movie_genres(self, movie_id):
+        '''Get genre IDs for a specific movie from the genre_map table.'''
+        conn = self.db_connect()
+        cursor = conn.cursor()
+        cursor.execute("SELECT genre_id FROM genre_map WHERE movie_id = ?", (movie_id,))
+        results = cursor.fetchall()
+        conn.close()
+        return [row['genre_id'] for row in results]
 
     # Debug methods
     def print_all_users(self):

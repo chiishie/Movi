@@ -9,12 +9,15 @@ import sqlite3
 from werkzeug.security import generate_password_hash, check_password_hash
 
 
+
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 load_dotenv()
 
+
 search_client = None
 movies = []
+
 
 
 # Run once at the start to fetch data from TMDB API
@@ -62,11 +65,11 @@ def search():
     global movies
     query = request.args.get('query')
     if query:
-        movies = search_client.search_movies(title=query)
+        movies = search_client.search_media(title=query)
         return render_template("search.html", movies=movies, query=query,is_discover=False)
     else:
         page = request.args.get('page', 1, type=int)
-        movies = search_client.discover_movies(page=page)
+        movies = search_client.discover_mixed_media(page=page)
         next_page = page + 1
         return render_template("search.html", movies=movies, query=None, is_discover=True, next_page=next_page)
 
@@ -112,7 +115,14 @@ def register():
 @app.route("/my_movies.html")
 def my_movies():
     global movies
-    movies = database.get_user_movies(session.get("user_id"))
+    user_movies = database.get_user_movies(session.get("user_id"))
+    # Add genre information to each movie
+    movies = []
+    for movie_row in user_movies:
+        movie = dict(movie_row)  # Convert Row to dict for modification
+        genre_ids = database.get_movie_genres(movie['id'])
+        movie['genre_names'] = search_client.genre_ids_to_names(genre_ids)
+        movies.append(movie)
     return render_template("my_movies.html", movies=movies, user_name=session.get("username"))
 
 @app.route("/rate_movie/<int:movie_id>", methods=["POST"])
@@ -122,7 +132,7 @@ def rate_movie(movie_id):
         print(f"id: {session['user_id']}, movie_id: {movie_id}, rating: {rating}")
         global movies
         movie = next((m for m in movies if m["id"] == movie_id), None)
-        database.add_movie(movie)
+        database.add_media(movie)
         database.add_user_movies_by_id(session["user_id"], movie_id, rating)
     elif rating:
         print("Not logged in")
@@ -139,7 +149,15 @@ def movie_detail(movie_id):
     if movie is None:
         abort(404)
     movie = dict(movie)
-    movie["genre_names"] = search_client.genre_ids_to_names(movie.get("genre_ids", []))
+    
+    
+    genre_ids = movie.get("genre_ids", [])
+    
+    if not genre_ids:
+        genre_ids = database.get_movie_genres(movie_id)
+    
+    movie["genre_names"] = search_client.genre_ids_to_names(genre_ids)
+    
     if session.get("user_id") is not None:
         user_movies = database.get_user_movies(session["user_id"])
         user_movie = None
@@ -158,7 +176,14 @@ def movie_detail(movie_id):
 
 @app.route("/movie/<int:movie_id>/videos.json")
 def movie_videos_json(movie_id):
-    videos = search_client.get_movie_videos(movie_id)
+    # Try to get the media from current movies list to determine media_type
+    global movies
+    media = next((m for m in movies if m["id"] == movie_id), None)
+    media_type = "movie"  # default
+    if media and media.get("media_type"):
+        media_type = media["media_type"]
+    
+    videos = search_client.get_media_videos(movie_id, media_type)
     return {
       "results": [
         {"key": v["key"], "name": v["name"], "type": v["type"]}

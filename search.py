@@ -22,80 +22,124 @@ class TMDBClient:
         self.fetch_genres()
 
 
-    def search_movies(self, title, year=None, page=1, get_all_pages=False, max_results=1000):
+    def _make_request(self, endpoint, params=None):
+        url = f"{self.base_url}{endpoint}"
+        if params is None:
+            params = {}
+        params['api_key'] = self.api_key
+    
+        try:
+            response = requests.get(url, headers=self.headers, params=params)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"API request failed: {e}")
+            return None
+
+
+    def search_media(self, title, year=None, page=1, get_all_pages=False, max_results=1000):
         '''Used TMDB's search endpoint to find movies by title.'''
-        query = quote(title)
-        results = []
-
-        # Add api_key to URL
-        url = f"{self.base_url}/search/movie?api_key={self.api_key}&query={query}&include_adult={self.include_adult}&language={self.language}&page={page}"
-        if year:
-            url += f"&year={year}"
-
-        response = requests.get(url, headers=self.headers)
-
-        if response.status_code != 200:
-            print(f"Error: {response.status_code}")
-            print(response.json().get("status_message", "No status message available."))
+        params = {
+        "query": title,
+        "page": page,
+        "language": self.language,
+        "include_adult": self.include_adult
+        }
+        data = self._make_request("/search/multi", params=params)
+    
+        if not data or 'results' not in data:
             return []
+        results = [
+            item for item in data['results'] 
+            if item.get('media_type') in ['movie', 'tv']
+        ]
 
-        data = response.json()
-        total_pages = data.get("total_pages", 0)
-        total_results = data.get("total_results", 0)
-        results.extend(data.get("results", []))
-
-        # For debugging purposes we can get a large number of results
-        if get_all_pages:
-            page += 1
-            while page <= total_pages and len(results) < max_results:
-                url = f"{self.base_url}/search/movie?api_key={self.api_key}&query={query}&include_adult={self.include_adult}&language={self.language}&page={page}"
-                if year:
-                    url += f"&year={year}"
-
-                response = requests.get(url, headers=self.headers)
-                if response.status_code != 200:
-                    print(f"Error on page {page}: {response.status_code}")
-                    break
-
-                data = response.json()
-                results.extend(data.get("results", []))
-                page += 1
-
-        print(f"Found {total_results} total results across {total_pages} pages. Fetched {len(results)} results.")
+    
+        for item in results:
+            if item.get('media_type') == 'tv':
+                item['title'] = item.get('name')
+    
         return results
 
 
-    def discover_movies(self, sort_by="popularity.desc", year=None, page=1):
+    def discover_movies(self, sort_by="popularity.desc", page=1):
         '''Used TMDB's discover endpoint to get a list of current popular movies.'''
-        url = f"{self.base_url}/discover/movie?api_key={self.api_key}&sort_by={sort_by}&include_adult={self.include_adult}&language={self.language}&page={page}"
-        if year is not None:
-            url += f"&primary_release_year={year}"
-        response = requests.get(url, headers=self.headers)
-
-        if response.status_code != 200:
-            print(f"Error: {response.status_code}")
-            print(response.json().get("status_message", "No status message available."))
+        params = {
+            "page": page,
+            "language": self.language,
+        }
+        data = self._make_request("/discover/movie", params=params)
+        if not data or 'results' not in data:
             return []
+        
+        for item in data["results"]:
+            item['media_type'] = 'movie'
+        
+        return data["results"]
+    
+    def discover_tv_shows(self, sort_by="popularity.desc", page=1):
+        '''Used TMDB's discover endpoint to get a list of current popular tv shows.'''
+        params = {
+            "page": page,
+            "language": self.language,
+        }
+        data = self._make_request("/discover/tv", params=params)
+        for item in data["results"]:
+            item['media_type'] = 'tv'
+        
+        return data["results"]
 
-        data = response.json()
-        return data.get("results", [])
+
+    def discover_mixed_media(self, page=1):
+        '''Fetches both popular movies and TV shows, combines and sorts them by popularity.'''
+        # Fetch movies and TV shows
+        movies = self.discover_movies(page=page)
+        tv_shows = self.discover_tv_shows(page=page)
+        
+        # Normalize TV show data to have 'title' field
+        for tv_show in tv_shows:
+            tv_show['title'] = tv_show.get('name', '')
+        
+        # Combine both lists
+        combined_media = movies + tv_shows
+        
+        # Sort by popularity (descending)
+        combined_media.sort(key=lambda x: x.get('popularity', 0), reverse=True)
+        
+        return combined_media
 
 
     def fetch_genres(self):
-        '''Fetches the list of movie genres from TMDB and stores them in a dictionary.'''
-        url = f"{self.base_url}/genre/movie/list?api_key={self.api_key}&language={self.language}"
-        response = requests.get(url, headers=self.headers)
-        self.genre_map = {}
+        '''Fetches the list of movie and TV genres from TMDB and stores them in dictionaries.'''
+        # Fetch movie genres
+        movie_url = f"{self.base_url}/genre/movie/list?api_key={self.api_key}&language={self.language}"
+        movie_response = requests.get(movie_url, headers=self.headers)
+        
+        # Fetch TV genres
+        tv_url = f"{self.base_url}/genre/tv/list?api_key={self.api_key}&language={self.language}"
+        tv_response = requests.get(tv_url, headers=self.headers)
+        
+        self.movie_genre_map = {}
+        self.tv_genre_map = {}
+        self.genre_map = {}  # Combined map for backward compatibility
 
-        if response.status_code == 200:
-            data = response.json()
-            self.genre_map = {genre['id']: genre['name'] for genre in data.get('genres', [])}
+        if movie_response.status_code == 200:
+            data = movie_response.json()
+            self.movie_genre_map = {genre['id']: genre['name'] for genre in data.get('genres', [])}
+            self.genre_map.update(self.movie_genre_map)
         else:
-            print(f"Error fetching genres: {response.status_code}")
+            print(f"Error fetching movie genres: {movie_response.status_code}")
+
+        if tv_response.status_code == 200:
+            data = tv_response.json()
+            self.tv_genre_map = {genre['id']: genre['name'] for genre in data.get('genres', [])}
+            self.genre_map.update(self.tv_genre_map)
+        else:
+            print(f"Error fetching TV genres: {tv_response.status_code}")
 
 
     def genre_ids_to_names(self, genre_ids):
-        '''Convert a list of genre IDs to their names using the genre_map.'''
+        '''Convert a list of genre IDs to their names using the combined genre_map.'''
         if not hasattr(self, 'genre_map'):
             self.fetch_genres()
         return [self.genre_map.get(genre_id, "Unknown") for genre_id in genre_ids]
@@ -107,12 +151,13 @@ class TMDBClient:
             json.dump(results, file, indent=2)
         print(f"Saved {len(results)} results to {filename}")
     
-    def get_movie_videos(self, movie_id: int) -> list[dict]:
+    def get_media_videos(self, media_id: int, media_type: str = "movie") -> list[dict]:
         """
-        Fetch YouTube video data (trailers, teasers, etc.) for a specific movie
+        Fetch YouTube video data (trailers, teasers, etc.) for a specific movie or TV show
         from TMDb, then sort by our type preference.
         """
-        url = f"{self.base_url}/movie/{movie_id}/videos"
+        endpoint = f"/{media_type}/{media_id}/videos"
+        url = f"{self.base_url}{endpoint}"
         params = {"api_key": self.api_key, "language": self.language}
         resp = requests.get(url, headers=self.headers, params=params)
         resp.raise_for_status()
@@ -125,3 +170,10 @@ class TMDBClient:
         priority = {"Trailer": 1, "Teaser": 2, "Clip": 3, "Featurette": 4}
         yt.sort(key=lambda v: priority.get(v.get("type", ""), 99))
         return yt
+
+    def get_movie_videos(self, movie_id: int) -> list[dict]:
+        """
+        Fetch YouTube video data (trailers, teasers, etc.) for a specific movie
+        from TMDb, then sort by our type preference.
+        """
+        return self.get_media_videos(movie_id, "movie")
