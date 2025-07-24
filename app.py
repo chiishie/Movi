@@ -177,7 +177,7 @@ def chat():
     user_message = data.get("message", "")
     response = get_chatbot_response(user_message)
     cleaned= clean_response(response)
-    return jsonify({"response": response})
+    return jsonify({"response": cleaned})
 
 if __name__ == "__main__":
     app.run(debug=True)
