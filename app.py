@@ -1,4 +1,4 @@
-from flask import Flask, render_template, abort, request, session, redirect, url_for
+from flask import Flask, render_template, abort, request, session, redirect, url_for, jsonify
 from dotenv import load_dotenv
 from search import TMDBClient
 import database
@@ -7,6 +7,7 @@ import requests
 import json
 import sqlite3
 from werkzeug.security import generate_password_hash, check_password_hash
+from chatbot import get_chatbot_response, clean_response
 
 
 app = Flask(__name__)
@@ -165,6 +166,18 @@ def movie_videos_json(movie_id):
         for v in videos
       ]
     }
+
+@app.route("/chat", methods=["GET"])
+def chat_page():
+    return render_template("chat.html")
+
+@app.route("/chat", methods=["POST"])
+def chat():
+    data = request.get_json()
+    user_message = data.get("message", "")
+    response = get_chatbot_response(user_message)
+    cleaned= clean_response(response)
+    return jsonify({"response": response})
 
 if __name__ == "__main__":
     app.run(debug=True)
