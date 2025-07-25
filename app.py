@@ -198,10 +198,22 @@ def chat_page():
 
 @app.route("/chat", methods=["POST"])
 def chat():
+    context = []
+    if session.get("user_id") is not None:
+    
+        user_data = database.get_user_movies(session["user_id"])
+        for user_movie in user_data:
+            media = dict(user_movie)
+            # Add genre_names for chatbot context
+            genre_ids = database.get_movie_genres(media['id'])
+            media['genre_names'] = search_client.genre_ids_to_names(genre_ids)
+            context.append(media)
+    else:
+        context = None
     data = request.get_json()
     user_message = data.get("message", "")
-    response = get_chatbot_response(user_message)
-    cleaned= clean_response(response)
+    response = get_chatbot_response(user_message, context)
+    cleaned = clean_response(response)
     return jsonify({"response": cleaned})
 
 if __name__ == "__main__":
