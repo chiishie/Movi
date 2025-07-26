@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Movie Recommendations{% endblock %}
+{% set active = 'recommendations' %}
+
+{% block body %}
+<h1 class="my-movies-title">Movie Recommendations</h1>
+
+<!-- Update notification -->
+<div class="update-notification">
+    <div style="text-align: center;">
+        <small style="color: #cccccc; font-style: italic;">
+            <i class="fas fa-sync-alt"></i> Recommendations update automatically when you rate movies
+        </small>
+        {% if last_update %}
+        <small class="last-update">
+            <i class="fas fa-clock"></i> Last updated: {{ last_update }}
+        </small>
+        {% endif %}
+        <br>
+        <button onclick="window.location.href='{{ url_for('refresh_recommendations') }}';" class="btn btn-outline-primary btn-sm" style="margin-top: 0.5rem;">
+            <i class="fas fa-refresh"></i> Refresh Recommendations
+        </button>
+        <button onclick="window.location.href='{{ url_for('add_popular_movies') }}';" class="btn btn-outline-success btn-sm" style="margin-top: 0.5rem; margin-left: 0.5rem;">
+            <i class="fas fa-plus"></i> Add Popular Movies
+        </button>
+    </div>
+</div>
+
+{% if error %}
+<div class="alert alert-warning" role="alert">
+    <i class="fas fa-exclamation-triangle"></i>
+    {{ error }}
+</div>
+{% endif %}
+
+{% if recommendations %}
+<div class="movie-list">
+    {% for movie in recommendations %}
+    <div class="individual-cards" onclick="window.location.href='{{ url_for('movie_detail', movie_id=movie.id) }}';">
+        {% if movie.poster_path %}
+            <img src="https://image.tmdb.org/t/p/w500{{ movie.poster_path }}" alt="Movie poster" class="image">
+        {% else %}
+            <div class="image-placeholder">
+                <i class="fas fa-film"></i>
+                <span>No Poster</span>
+            </div>
+        {% endif %}
+        <p style="margin-bottom: -10px;">{{ movie.title }}</p>
+        <p class="rating">&#11088; {{ movie.vote_average }}</p>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-5">
+    <i class="fas fa-film fa-3x text-muted mb-3"></i>
+    <h3 class="text-muted">No recommendations yet</h3>
+    <p class="text-muted">
+        {% if not error %}
+        Rate some movies first to get personalized recommendations!
+        {% endif %}
+    </p>
+    <a href="{{ url_for('search') }}" class="btn btn-primary">
+        <i class="fas fa-search"></i> Start Exploring Movies
+    </a>
+</div>
+{% endif %}
+{% endblock %} 
