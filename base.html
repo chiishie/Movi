@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <title>{% block title %}NOT IMPLEMENTED YET{% endblock %}</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='images/favicon.ico') }}">
+</head>
+
+<body>
+    <header>
+        <nav class="navbar" id="navbar">
+            <!-- Brand/Logo section -->
+            <div class="navbar-brand">
+                <h2>🎬 Movi</h2>
+            </div>
+            <!-- Navigation links -->
+            <div class="nav-links">
+                <a href="{{ url_for('search') }}" class="nav-link {% if active == 'search' %}active{% endif %}">
+                    Search
+                </a>
+                <a href="{{ url_for('my_movies') }}" class="nav-link {% if active == 'my_movies' %}active{% endif %}">
+                    Saved Movies
+              </a>
+                <a href="{{ url_for('recommendations') }}" class="nav-link {% if active == 'recommendations' %}active{% endif %}">
+                    Recommendations
+                </a>
+                <a href="{{ url_for('chat_page') }}" class="nav-link {% if active == 'chat' %}active{% endif %}">
+                  Chatbot
+                </a>
+            </div>
+            <!-- Profile section -->
+            <div class="navbar-profile">
+                {% if session.username %}
+                  <span class="username">{{ session.username }}</span>
+                {% endif %}
+                <!-- add id here -->
+                <img
+                  id="profile-pic"
+                  src="{{ url_for('static', filename='images/Default-Avatar.png') }}"
+                  alt="Profile Pic"
+                  class="avatar"
+                  style="height:50px; width:50px; border-radius:50%; cursor:pointer;"
+                >
+              
+                <!-- move this inside .navbar-profile -->
+                <div id="profile-menu" class="dropdown-menu">
+                  {% if session.username %}
+                    <button onclick="window.location.href='{{ url_for('logout') }}'">
+                      Logout
+                    </button>
+                  {% else %}
+                    <button onclick="window.location.href='{{ url_for('login') }}'">
+                      Login
+                    </button>
+                  {% endif %}
+                </div>
+              </div>
+              <script>
+                document.addEventListener('DOMContentLoaded', () => {
+                  const pic  = document.getElementById('profile-pic');
+                  const menu = document.getElementById('profile-menu');
+              
+                  // toggle on avatar click
+                  pic.addEventListener('click', e => {
+                    e.stopPropagation();
+                    menu.classList.toggle('open');
+                  });
+              
+                  // click anywhere else? close it.
+                  document.addEventListener('click', e => {
+                    if (!menu.contains(e.target)) {
+                      menu.classList.remove('open');
+                    }
+                  });
+                });
+              </script>
+        </nav>
+    </header>
+
+    <main>
+        {% block body %}
+        <!-- Child templates insert their content here -->
+        {% endblock %}
+    </main>
+
+    <!-- Put any global JS scripts under here -->
+</body>
+</html>

@@ -8,22 +8,20 @@ import json
 import sqlite3
 from werkzeug.security import generate_password_hash, check_password_hash
 from chatbot import get_chatbot_response, clean_response
-
-
+import joblib
+from model import MovieRecommender
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 load_dotenv()
 
-
 search_client = None
 movies = []
-
-
+recommender = None
 
 # Run once at the start to fetch data from TMDB API
 def init_app():
-    global search_client, database
+    global search_client, database, recommender
 
     # Initialize the database
     database = database.MovieRankerDB()
@@ -38,6 +36,14 @@ def init_app():
     search_client.fetch_genres()
     # Run the initialization of the database to create tables if they don't exist
     database.init_db()
+    
+    # Initialize the recommendation model
+    try:
+        recommender = MovieRecommender()
+        print("Movie recommendation model initialized successfully")
+    except Exception as e:
+        print(f"Error initializing recommendation model: {e}")
+        recommender = None
 
 init_app()
 
@@ -135,6 +141,13 @@ def rate_movie(movie_id):
         movie = next((m for m in movies if m["id"] == movie_id), None)
         database.add_media(movie)
         database.add_user_movies_by_id(session["user_id"], movie_id, rating)
+        
+        # Refresh the recommendation model when new ratings are added
+        try:
+            refresh_model()
+            print(f"Recommendation model refreshed after rating movie {movie_id}")
+        except Exception as e:
+            print(f"Error refreshing recommendation model: {e}")
     elif rating:
         print("Not logged in")
         return redirect(url_for("login"))
@@ -147,10 +160,41 @@ def movie_detail(movie_id):
     # Look up the movie in your database or list
     global movies
     movie = next((m for m in movies if m["id"] == movie_id), None)
+    
+    # If not in current movies list, try to get from database
+    if movie is None:
+        movie_data = database.get_movie_data(movie_id)
+        if movie_data:
+            movie = dict(movie_data)
+        else:
+            # Try to fetch from TMDB API
+            try:
+                from search import TMDBClient
+                import os
+                from dotenv import load_dotenv
+                
+                load_dotenv()
+                api_key = os.getenv("TMDB_API_KEY")
+                if api_key:
+                    tmdb_client = TMDBClient(api_key=api_key)
+                    # Search for the movie by ID
+                    search_results = tmdb_client.search_media(title=str(movie_id))
+                    if search_results:
+                        movie = search_results[0]
+                        # Add to database
+                        database.add_media(movie)
+                    else:
+                        abort(404)
+                else:
+                    abort(404)
+            except Exception as e:
+                print(f"Error fetching movie {movie_id}: {e}")
+                abort(404)
+    
     if movie is None:
         abort(404)
-    movie = dict(movie)
     
+    movie = dict(movie)
     
     genre_ids = movie.get("genre_ids", [])
     
@@ -215,6 +259,156 @@ def chat():
     response = get_chatbot_response(user_message, context)
     cleaned = clean_response(response)
     return jsonify({"response": cleaned})
+
+@app.route("/recommendations")
+def recommendations():
+    global recommender
+    
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
+    
+    if recommender is None:
+        try:
+            recommender = MovieRecommender()
+        except Exception as e:
+            return render_template("recommendations.html", 
+                                 recommendations=[], 
+                                 user_name=session.get("username"),
+                                 error="Recommendation model not available. Please try again later.")
+    
+    try:
+        # Get personalized recommendations for the user (minimum 5, maximum 10)
+        user_recommendations = recommender.recommend_for_user(session["user_id"], top_n=10)
+        
+        # Log the number of recommendations we got
+        print(f"Generated {len(user_recommendations)} recommendations for user")
+        if len(user_recommendations) < 5:
+            print(f"Note: Got {len(user_recommendations)} recommendations (limited by database size)")
+        
+        # Add genre information to recommendations
+        for rec in user_recommendations:
+            genre_ids = database.get_movie_genres(rec['id'])
+            rec['genre_names'] = search_client.genre_ids_to_names(genre_ids)
+        
+        return render_template("recommendations.html", 
+                             recommendations=user_recommendations, 
+                             user_name=session.get("username"),
+                             last_update=session.get("last_model_update"))
+    except Exception as e:
+        print(f"Error generating recommendations: {e}")
+        return render_template("recommendations.html", 
+                             recommendations=[], 
+                             user_name=session.get("username"),
+                             error=f"Error generating recommendations: {str(e)}",
+                             last_update=session.get("last_model_update"))
+
+@app.route("/retrain_model", methods=["POST"])
+def retrain_model():
+    """Retrain the recommendation model with updated data"""
+    if not session.get("user_id"):
+        return jsonify({"success": False, "error": "Not logged in"})
+    
+    global recommender
+    try:
+        # Rebuild the model with current database data
+        recommender = MovieRecommender()
+        return jsonify({"success": True, "message": "Model retrained successfully"})
+    except Exception as e:
+        print(f"Error retraining model: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route("/refresh_recommendations")
+def refresh_recommendations():
+    """Force refresh recommendations and redirect back"""
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
+    
+    global recommender
+    try:
+        # Force rebuild the model with current database data
+        if recommender is None:
+            recommender = MovieRecommender()
+        else:
+            recommender.force_rebuild()
+        print("Recommendations refreshed manually")
+        # Store the last update time in session
+        from datetime import datetime
+        session['last_model_update'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    except Exception as e:
+        print(f"Error refreshing recommendations: {e}")
+    
+    return redirect(url_for("recommendations"))
+
+@app.route("/add_popular_movies")
+def add_popular_movies():
+    """Manually add popular movies to the database"""
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
+    
+    try:
+        from search import TMDBClient
+        import os
+        from dotenv import load_dotenv
+        
+        load_dotenv()
+        api_key = os.getenv("TMDB_API_KEY")
+        if api_key:
+            tmdb_client = TMDBClient(api_key=api_key)
+            
+            # Search for specific popular movies
+            popular_search_terms = ['Avengers', 'Batman', 'Spider-Man', 'Iron Man', 'Captain America', 'Wonder Woman', 'Black Panther', 'Thor']
+            added_count = 0
+            
+            for search_term in popular_search_terms:
+                try:
+                    search_results = tmdb_client.search_media(title=search_term)
+                    for movie in search_results[:2]:  # Get top 2 results for each search
+                        # Add to database
+                        movie_data = {
+                            'id': movie['id'],
+                            'title': movie['title'],
+                            'overview': movie.get('overview', ''),
+                            'vote_average': movie.get('vote_average', 0),
+                            'vote_count': movie.get('vote_count', 0),
+                            'popularity': movie.get('popularity', 0),
+                            'poster_path': movie.get('poster_path', ''),
+                            'media_type': movie.get('media_type', 'movie')
+                        }
+                        database.add_media(movie_data)
+                        added_count += 1
+                except Exception as e:
+                    print(f"Error searching for {search_term}: {e}")
+            
+            print(f"Added {added_count} popular movies to database")
+            
+            # Rebuild the recommendation model
+            global recommender
+            if recommender:
+                recommender.force_rebuild()
+            
+            # Store the last update time in session
+            from datetime import datetime
+            session['last_model_update'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+    except Exception as e:
+        print(f"Error adding popular movies: {e}")
+    
+    return redirect(url_for("recommendations"))
+
+def refresh_model():
+    """Refresh the recommendation model - called when new movies are added"""
+    global recommender
+    try:
+        if recommender is None:
+            recommender = MovieRecommender()
+        else:
+            recommender.force_rebuild()
+        print("Recommendation model refreshed successfully")
+        # Store the last update time in session
+        from datetime import datetime
+        session['last_model_update'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    except Exception as e:
+        print(f"Error refreshing recommendation model: {e}")
 
 if __name__ == "__main__":
     app.run(debug=True)
