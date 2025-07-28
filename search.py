@@ -92,18 +92,17 @@ class TMDBClient:
 
     def discover_mixed_media(self, page=1):
         '''Fetches both popular movies and TV shows, combines and sorts them by popularity.'''
-        # Fetch movies and TV shows
+        
         movies = self.discover_movies(page=page)
         tv_shows = self.discover_tv_shows(page=page)
         
-        # Normalize TV show data to have 'title' field
+        
         for tv_show in tv_shows:
             tv_show['title'] = tv_show.get('name', '')
         
-        # Combine both lists
+        
         combined_media = movies + tv_shows
         
-        # Sort by popularity (descending)
         combined_media.sort(key=lambda x: x.get('popularity', 0), reverse=True)
         
         return combined_media
@@ -111,17 +110,17 @@ class TMDBClient:
 
     def fetch_genres(self):
         '''Fetches the list of movie and TV genres from TMDB and stores them in dictionaries.'''
-        # Fetch movie genres
+     
         movie_url = f"{self.base_url}/genre/movie/list?api_key={self.api_key}&language={self.language}"
         movie_response = requests.get(movie_url, headers=self.headers)
         
-        # Fetch TV genres
+    
         tv_url = f"{self.base_url}/genre/tv/list?api_key={self.api_key}&language={self.language}"
         tv_response = requests.get(tv_url, headers=self.headers)
         
         self.movie_genre_map = {}
         self.tv_genre_map = {}
-        self.genre_map = {}  # Combined map for backward compatibility
+        self.genre_map = {}  
 
         if movie_response.status_code == 200:
             data = movie_response.json()

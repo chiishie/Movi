@@ -5,8 +5,8 @@
 
 {% block body %}
 <h1 class = "my-movies-title">Your Movies</h1>
-<div class="text-center mb-4">
-    <a href="{{ url_for('recommendations') }}" class="btn btn-primary">
+<div class="text-center mb-4" style="text-align: center;">
+    <a href="{{ url_for('recommendations') }}" class="recommendation-btn">
         <i class="fas fa-star"></i> Get Recommendations
     </a>
 </div>
@@ -19,6 +19,12 @@
     <img src="https://image.tmdb.org/t/p/w500{{ movie.poster_path }}" alt="Movie poster" class="image">
     <p style="margin-bottom: -10px;">{{ movie.title }}</p>
     <p class="rating">&#11088; {{ movie.vote_average }}</p>
+    {% if movie.rating %}
+    <p class="user-rating-display">Your Rating: {{ movie.rating }}/10</p>
+    {% endif %}
+    {% if movie.genre_names %}
+    <p class="genres">{{ movie.genre_names | join(', ') }}</p>
+    {% endif %}
   </div>
   {% endfor %}
 </div>

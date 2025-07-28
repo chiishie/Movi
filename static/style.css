@@ -935,3 +935,39 @@ input.search-bar {
   background: linear-gradient(135deg, #ff4848 0%, #ff7b7b 100%);
   transform: scale(1.05);
 }
+
+/* Recommendation button styling */
+.recommendation-btn {
+  display: inline-block;
+  padding: 0.7rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #ff3838 0%, #ff6b6b 100%);
+  border: none;
+  border-radius: 6px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.2s;
+  box-shadow: 0 4px 15px rgba(255, 56, 56, 0.4);
+}
+
+.recommendation-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 56, 56, 0.3);
+  color: #fff;
+  text-decoration: none;
+}
+
+.recommendation-btn i {
+  margin-right: 0.5rem;
+}
+
+
+.user-rating-display {
+  color: #ff6b6b;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: -2px;
+  margin-top: 2px;
+}
