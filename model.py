@@ -75,7 +75,7 @@ class MovieRecommender:
         conn.close()
         return user_movies
     
-    def recommend_for_user(self, user_id, top_n=10):
+    def recommend_for_user(self, user_id, top_n=10, random_seed=None):
         """Generate recommendations for a specific user based on their ratings"""
         print(f"Debug: Getting recommendations for user {user_id}")
         user_movies = self.get_user_rated_movies(user_id)
@@ -89,7 +89,7 @@ class MovieRecommender:
         if user_movies.empty:
             print("Debug: User has no ratings, returning popular movies")
             # If user has no ratings, return popular movies
-            popular = self.get_popular_movies(top_n)
+            popular = self.get_popular_movies(top_n, random_seed=random_seed)
             print(f"Debug: Returning {len(popular)} popular movies")
             return popular
         
@@ -98,13 +98,13 @@ class MovieRecommender:
         print(f"Debug: User's highly rated movies: {user_titles}")
         
         # Get recommendations based on user's movies
-        recommendations = self.recommend(user_titles, top_n, rated_movie_ids)
+        recommendations = self.recommend(user_titles, top_n, rated_movie_ids, random_seed=random_seed)
         print(f"Debug: Generated {len(recommendations)} recommendations")
         
         # If we don't have enough recommendations, add popular movies (excluding rated)
         if len(recommendations) < top_n:
             print(f"Debug: Only got {len(recommendations)} recommendations, adding popular movies")
-            popular_movies = self.get_popular_movies(top_n * 2, rated_movie_ids)  # Get more popular movies, excluding rated
+            popular_movies = self.get_popular_movies(top_n * 2, rated_movie_ids, random_seed=random_seed)  # Get more popular movies, excluding rated
             
             # Filter out movies that are already in recommendations
             existing_ids = {rec['id'] for rec in recommendations}
@@ -165,6 +165,8 @@ class MovieRecommender:
                             'vote_count': movie['vote_count'],
                             'popularity': movie['popularity'],
                             'poster_path': movie['poster_path'],
+                            'release_date': movie.get('release_date'),
+                            'original_language': movie.get('original_language', 'en'),
                             'media_type': 'movie'
                         }
                         db.add_media(movie_data)
@@ -203,6 +205,8 @@ class MovieRecommender:
                                         'vote_count': movie.get('vote_count', 0),
                                         'popularity': movie.get('popularity', 0),
                                         'poster_path': movie.get('poster_path', ''),
+                                        'release_date': movie.get('release_date'),
+                                        'original_language': movie.get('original_language', 'en'),
                                         'media_type': movie.get('media_type', 'movie')
                                     }
                                     db.add_media(movie_data)
@@ -247,6 +251,8 @@ class MovieRecommender:
                                         'vote_count': movie.get('vote_count', 0),
                                         'popularity': movie.get('popularity', 0),
                                         'poster_path': movie.get('poster_path', ''),
+                                        'release_date': movie.get('release_date'),
+                                        'original_language': movie.get('original_language', 'en'),
                                         'media_type': movie.get('media_type', 'movie')
                                     }
                                     db.add_media(movie_data)
@@ -264,7 +270,7 @@ class MovieRecommender:
         
         return recommendations  # Return all available movies (up to top_n)
     
-    def recommend(self, saved_titles, top_n=5, exclude_movie_ids=None):
+    def recommend(self, saved_titles, top_n=5, exclude_movie_ids=None, random_seed=None):
         """Recommend movies based on a list of movie titles"""
         if self.similarity_matrix is None:
             print("Debug: No similarity matrix available")
@@ -312,6 +318,8 @@ class MovieRecommender:
         
         # Add some randomization to ensure variety
         import random
+        if random_seed:
+            random.seed(random_seed)
         if len(recommendations) > top_n:
             recommendations = random.sample(recommendations, min(top_n, len(recommendations)))
         
@@ -321,7 +329,7 @@ class MovieRecommender:
         recommended_movies = self.movies_df.iloc[recommendations][['id', 'title', 'overview', 'vote_average', 'vote_count', 'popularity', 'poster_path']]
         return recommended_movies.to_dict(orient='records')
     
-    def get_popular_movies(self, top_n=10, exclude_movie_ids=None):
+    def get_popular_movies(self, top_n=10, exclude_movie_ids=None, random_seed=None):
         """Get popular movies based on vote_average and vote_count"""
         print(f"Debug: Getting {top_n} popular movies")
         if self.movies_df is None or self.movies_df.empty:
@@ -347,6 +355,8 @@ class MovieRecommender:
         popular_movies = available_movies.nlargest(top_n * 2, 'popularity_score')  # Get more movies
         # Randomly sample from top movies to add variety
         import random
+        if random_seed:
+            random.seed(random_seed)
         if len(popular_movies) > top_n:
             popular_movies = popular_movies.sample(n=top_n, random_state=random.randint(1, 1000))
         
@@ -359,6 +369,17 @@ class MovieRecommender:
         print("Force rebuilding recommendation model...")
         self._build_model()
         print("Model force rebuild completed!")
+    
+    def get_fresh_recommendations(self, user_id, top_n=10):
+        """Generate fresh recommendations with new randomization"""
+        import random
+        import time
+        
+        # Generate a new random seed based on current time and user ID
+        random_seed = int(time.time() * 1000) + user_id + random.randint(1, 10000)
+        print(f"Debug: Generating fresh recommendations with random seed: {random_seed}")
+        
+        return self.recommend_for_user(user_id, top_n, random_seed=random_seed)
     
     def _ensure_movies_in_database(self, recommendations):
         """Ensure all recommended movies are properly added to the database"""
@@ -384,6 +405,8 @@ class MovieRecommender:
                         'vote_count': movie.get('vote_count', 0),
                         'popularity': movie.get('popularity', 0),
                         'poster_path': movie.get('poster_path', ''),
+                        'release_date': movie.get('release_date'),
+                        'original_language': movie.get('original_language', 'en'),
                         'media_type': movie.get('media_type', 'movie')
                     }
                     db.add_media(movie_data)

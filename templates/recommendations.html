@@ -19,7 +19,7 @@
         {% endif %}
         <br>
         <button onclick="window.location.href='{{ url_for('refresh_recommendations') }}';" class="btn btn-outline-primary btn-sm" style="margin-top: 0.5rem;">
-            <i class="fas fa-refresh"></i> Refresh Recommendations
+            <i class="fas fa-refresh"></i> Get New Suggestions
         </button>
         <button onclick="window.location.href='{{ url_for('add_popular_movies') }}';" class="btn btn-outline-success btn-sm" style="margin-top: 0.5rem; margin-left: 0.5rem;">
             <i class="fas fa-plus"></i> Add Popular Movies
@@ -31,6 +31,13 @@
 <div class="alert alert-warning" role="alert">
     <i class="fas fa-exclamation-triangle"></i>
     {{ error }}
+</div>
+{% endif %}
+
+{% if fresh_recommendations_loaded %}
+<div class="alert alert-success" role="alert">
+    <i class="fas fa-check-circle"></i>
+    Fresh recommendations loaded! New movies have been suggested based on your preferences.
 </div>
 {% endif %}
 

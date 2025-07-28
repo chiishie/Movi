@@ -83,7 +83,13 @@ class MovieRankerDB:
         media_type = media_data.get('media_type', 'movie')
         is_movie = media_type == 'movie'
         title = media_data['title'] if is_movie else media_data['name']
-        release_date = media_data['release_date'] if is_movie else media_data['first_air_date']
+        
+        # Safely get release date with fallback
+        release_date = None
+        if is_movie:
+            release_date = media_data.get('release_date')
+        else:
+            release_date = media_data.get('first_air_date')
         
         media_data = dict(media_data) 
         self.add_genres(media_data['id'], media_data.get('genre_ids', []))
@@ -92,7 +98,7 @@ class MovieRankerDB:
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             media_data['id'], media_data.get('backdrop_path'),
-            media_data.get('poster_path'), media_data['original_language'], title,
+            media_data.get('poster_path'), media_data.get('original_language', 'en'), title,
             media_data.get('overview'), release_date, media_data.get('vote_average', 0),
             media_data.get('vote_count', 0), media_data.get('popularity', 0), media_type
         ))

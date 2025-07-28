@@ -19,7 +19,7 @@
                 <h1 class="movie-title">{{ movie.title }}</h1>
                 <p class="movie-meta">
                     <span class="rating">⭐ {{ movie.vote_average }}</span> | 
-                    <span class="release-date">{{ movie.release_date }}</span>
+                    <span class="release-date">{% if movie.release_date %}{{ movie.release_date }}{% else %}Release date not available{% endif %}</span>
                 </p>
                 <p class="movie-overview">{{ movie.overview }}</p>
                 <script>

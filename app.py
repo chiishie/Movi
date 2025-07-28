@@ -154,14 +154,21 @@ def register():
 
 @app.route("/my_movies.html")
 def my_movies():
-    global movies
+    global movies, search_client
     user_movies = database.get_user_movies(session.get("user_id"))
     # Add genre information to each movie
     movies = []
     for movie_row in user_movies:
         movie = dict(movie_row)  # Convert Row to dict for modification
-        genre_ids = database.get_movie_genres(movie['id'])
-        movie['genre_names'] = search_client.genre_ids_to_names(genre_ids)
+        try:
+            genre_ids = database.get_movie_genres(movie['id'])
+            if search_client:
+                movie['genre_names'] = search_client.genre_ids_to_names(genre_ids)
+            else:
+                movie['genre_names'] = []
+        except Exception as e:
+            print(f"Error getting genres for movie {movie.get('id', 'unknown')}: {e}")
+            movie['genre_names'] = []
         movies.append(movie)
     return render_template("my_movies.html", movies=movies, user_name=session.get("username"))
 
@@ -171,16 +178,57 @@ def rate_movie(movie_id):
     if rating and session.get("user_id") is not None:
         print(f"id: {session['user_id']}, movie_id: {movie_id}, rating: {rating}")
         global movies
-        movie = next((m for m in movies if m["id"] == movie_id), None)
-        database.add_media(movie)
-        database.add_user_movies_by_id(session["user_id"], movie_id, rating)
         
-        # Refresh the recommendation model when new ratings are added
-        try:
-            refresh_model()
-            print(f"Recommendation model refreshed after rating movie {movie_id}")
-        except Exception as e:
-            print(f"Error refreshing recommendation model: {e}")
+        # Try to find movie in global movies list first
+        movie = next((m for m in movies if m["id"] == movie_id), None)
+        
+        # If not found in global list, try to get from database
+        if movie is None:
+            movie_data = database.get_movie_data(movie_id)
+            if movie_data:
+                movie = dict(movie_data)
+            else:
+                # Try to fetch from TMDB API by movie ID
+                try:
+                    from search import TMDBClient
+                    import os
+                    from dotenv import load_dotenv
+                    
+                    load_dotenv()
+                    api_key = os.getenv("TMDB_API_KEY")
+                    if api_key:
+                        tmdb_client = TMDBClient(api_key=api_key)
+                        # Fetch movie by ID directly
+                        movie_data = tmdb_client._make_request(f"/movie/{movie_id}")
+                        if movie_data and 'id' in movie_data:
+                            movie = movie_data
+                        else:
+                            print(f"Movie {movie_id} not found in TMDB API")
+                            return redirect(url_for("movie_detail", movie_id=movie_id))
+                    else:
+                        print("TMDB API key not available")
+                        return redirect(url_for("movie_detail", movie_id=movie_id))
+                except Exception as e:
+                    print(f"Error fetching movie {movie_id}: {e}")
+                    return redirect(url_for("movie_detail", movie_id=movie_id))
+        
+        # Add movie to database if we have movie data
+        if movie:
+            try:
+                database.add_media(movie)
+                database.add_user_movies_by_id(session["user_id"], movie_id, rating)
+                
+                # Refresh the recommendation model when new ratings are added
+                try:
+                    refresh_model()
+                    print(f"Recommendation model refreshed after rating movie {movie_id}")
+                except Exception as e:
+                    print(f"Error refreshing recommendation model: {e}")
+            except Exception as e:
+                print(f"Error adding movie to database: {e}")
+        else:
+            print(f"Could not find movie {movie_id} to rate")
+            
     elif rating:
         print("Not logged in")
         return redirect(url_for("login"))
@@ -191,7 +239,7 @@ def rate_movie(movie_id):
 @app.route("/movie/<int:movie_id>")
 def movie_detail(movie_id):
     # Look up the movie in your database or list
-    global movies
+    global movies, search_client
     movie = next((m for m in movies if m["id"] == movie_id), None)
     
     # If not in current movies list, try to get from database
@@ -200,7 +248,7 @@ def movie_detail(movie_id):
         if movie_data:
             movie = dict(movie_data)
         else:
-            # Try to fetch from TMDB API
+            # Try to fetch from TMDB API by movie ID
             try:
                 from search import TMDBClient
                 import os
@@ -210,10 +258,10 @@ def movie_detail(movie_id):
                 api_key = os.getenv("TMDB_API_KEY")
                 if api_key:
                     tmdb_client = TMDBClient(api_key=api_key)
-                    # Search for the movie by ID
-                    search_results = tmdb_client.search_media(title=str(movie_id))
-                    if search_results:
-                        movie = search_results[0]
+                    # Fetch movie by ID directly
+                    movie_data = tmdb_client._make_request(f"/movie/{movie_id}")
+                    if movie_data and 'id' in movie_data:
+                        movie = movie_data
                         # Add to database
                         database.add_media(movie)
                     else:
@@ -229,45 +277,80 @@ def movie_detail(movie_id):
     
     movie = dict(movie)
     
+    # Handle genre information
     genre_ids = movie.get("genre_ids", [])
     
     if not genre_ids:
-        genre_ids = database.get_movie_genres(movie_id)
+        try:
+            genre_ids = database.get_movie_genres(movie_id)
+        except Exception as e:
+            print(f"Error getting genres for movie {movie_id}: {e}")
+            genre_ids = []
     
-    movie["genre_names"] = search_client.genre_ids_to_names(genre_ids)
+    # Set genre names if search_client is available
+    if search_client and genre_ids:
+        try:
+            movie["genre_names"] = search_client.genre_ids_to_names(genre_ids)
+        except Exception as e:
+            print(f"Error converting genre IDs to names for movie {movie_id}: {e}")
+            movie["genre_names"] = []
+    else:
+        movie["genre_names"] = []
     
     if session.get("user_id") is not None:
-        user_movies = database.get_user_movies(session["user_id"])
-        user_movie = None
-        for um in user_movies:
-            if um["id"] == movie["id"]:
-                user_movie = um
-                break
         try:
-            rating = user_movie["rating"]
-        except TypeError:
-            rating = None
-        if user_movie and rating:
-            movie["rating"] = rating
+            user_movies = database.get_user_movies(session["user_id"])
+            user_movie = None
+            for um in user_movies:
+                if um["id"] == movie["id"]:
+                    user_movie = um
+                    break
+            try:
+                rating = user_movie["rating"]
+            except (TypeError, AttributeError):
+                rating = None
+            if user_movie and rating:
+                movie["rating"] = rating
+        except Exception as e:
+            print(f"Error getting user rating for movie {movie_id}: {e}")
+    
     return render_template("movie_detail.html", movie=movie)
 
 
 @app.route("/movie/<int:movie_id>/videos.json")
 def movie_videos_json(movie_id):
-    # Try to get the media from current movies list to determine media_type
-    global movies
-    media = next((m for m in movies if m["id"] == movie_id), None)
-    media_type = "movie"  # default
-    if media and media.get("media_type"):
-        media_type = media["media_type"]
-    
-    videos = search_client.get_media_videos(movie_id, media_type)
-    return {
-      "results": [
-        {"key": v["key"], "name": v["name"], "type": v["type"]}
-        for v in videos
-      ]
-    }
+    try:
+        # Try to get the media from current movies list to determine media_type
+        global movies, search_client
+        media = next((m for m in movies if m["id"] == movie_id), None)
+        
+        # If not in global list, check database
+        if media is None:
+            try:
+                movie_data = database.get_movie_data(movie_id)
+                if movie_data:
+                    media = dict(movie_data)
+            except Exception as e:
+                print(f"Error getting movie data for videos: {e}")
+        
+        media_type = "movie"  # default
+        if media and media.get("media_type"):
+            media_type = media["media_type"]
+        
+        if search_client:
+            videos = search_client.get_media_videos(movie_id, media_type)
+        else:
+            videos = []
+        
+        return {
+          "results": [
+            {"key": v["key"], "name": v["name"], "type": v["type"]}
+            for v in videos
+          ]
+        }
+    except Exception as e:
+        print(f"Error in movie_videos_json for movie {movie_id}: {e}")
+        return {"results": []}
 
 @app.route("/chat", methods=["GET"])
 def chat_page():
@@ -284,8 +367,15 @@ def chat():
         for user_movie in user_data:
             media = dict(user_movie)
             # Add genre_names for chatbot context
-            genre_ids = database.get_movie_genres(media['id'])
-            media['genre_names'] = search_client.genre_ids_to_names(genre_ids)
+            try:
+                genre_ids = database.get_movie_genres(media['id'])
+                if search_client:
+                    media['genre_names'] = search_client.genre_ids_to_names(genre_ids)
+                else:
+                    media['genre_names'] = []
+            except Exception as e:
+                print(f"Error getting genres for chat context movie {media.get('id', 'unknown')}: {e}")
+                media['genre_names'] = []
             context.append(media)
         history = get_chat_history(session['user_id'])
     else:
@@ -309,6 +399,30 @@ def recommendations():
     if not session.get("user_id"):
         return redirect(url_for("login"))
     
+    # Check if we have fresh recommendations from a refresh
+    if 'fresh_recommendations' in session:
+        user_recommendations = session['fresh_recommendations']
+        # Clear the fresh recommendations from session after use
+        del session['fresh_recommendations']
+        
+        # Add genre information to fresh recommendations
+        for rec in user_recommendations:
+            try:
+                genre_ids = database.get_movie_genres(rec['id'])
+                if search_client:
+                    rec['genre_names'] = search_client.genre_ids_to_names(genre_ids)
+                else:
+                    rec['genre_names'] = []
+            except Exception as e:
+                print(f"Error getting genres for fresh recommendation {rec.get('id', 'unknown')}: {e}")
+                rec['genre_names'] = []
+        
+        return render_template("recommendations.html", 
+                             recommendations=user_recommendations, 
+                             user_name=session.get("username"),
+                             last_update=session.get("last_model_update"),
+                             fresh_recommendations_loaded=True)
+    
     if recommender is None:
         try:
             recommender = MovieRecommender()
@@ -329,8 +443,15 @@ def recommendations():
         
         # Add genre information to recommendations
         for rec in user_recommendations:
-            genre_ids = database.get_movie_genres(rec['id'])
-            rec['genre_names'] = search_client.genre_ids_to_names(genre_ids)
+            try:
+                genre_ids = database.get_movie_genres(rec['id'])
+                if search_client:
+                    rec['genre_names'] = search_client.genre_ids_to_names(genre_ids)
+                else:
+                    rec['genre_names'] = []
+            except Exception as e:
+                print(f"Error getting genres for recommendation {rec.get('id', 'unknown')}: {e}")
+                rec['genre_names'] = []
         
         return render_template("recommendations.html", 
                              recommendations=user_recommendations, 
@@ -372,7 +493,14 @@ def refresh_recommendations():
             recommender = MovieRecommender()
         else:
             recommender.force_rebuild()
-        print("Recommendations refreshed manually")
+        
+        # Generate fresh recommendations with new randomization
+        fresh_recommendations = recommender.get_fresh_recommendations(session["user_id"], top_n=10)
+        
+        # Store fresh recommendations in session for immediate use
+        session['fresh_recommendations'] = fresh_recommendations
+        
+        print("Recommendations refreshed manually with new randomization")
         # Store the last update time in session
         from datetime import datetime
         session['last_model_update'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
