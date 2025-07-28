@@ -8,6 +8,7 @@ import json
 import sqlite3
 from werkzeug.security import generate_password_hash, check_password_hash
 from chatbot import get_chatbot_response, clean_response
+import uuid
 import joblib
 from model import MovieRecommender
 
@@ -67,6 +68,36 @@ def get_or_make_user(username):
     conn.close()
     return user
 
+def save_chat_message(user_id, role, message):
+    conn = sqlite3.connect('movie_ranker.db')
+    cursor = conn.cursor()
+    cursor.execute("""
+    INSERT INTO chat_history (user_id, session_id, role, message)
+    VALUES (?, ?, ?, ?)
+    """, (user_id, session.get("chat_session"), role, message))
+    conn.commit()
+    conn.close()
+
+def reset_chat_history(user_id, history):
+    conn = sqlite3.connect('movie_ranker.db')
+    cursor = conn.cursor()
+    cursor.execute("""
+    DELETE FROM chat_history WHERE user_id = ? AND session_id = ?""", user_id, session.get('chat_session', history))
+    conn.commit()
+    conn.close()
+
+def get_chat_history(user_id):
+    conn = sqlite3.connect('movie_ranker.db')
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT role, message FROM chat_history
+    WHERE user_id = ? AND session_id = ?
+    ORDER BY id ASC
+    """, (user_id, session.get('chat_session')))
+    history = cursor.fetchall()
+    conn.close()
+    return [{'role': r, "message": m} for r, m in history]
+
 @app.route("/")
 def search():
     global movies
@@ -93,6 +124,8 @@ def login():
             return render_template("login.html", error="Invalid username or password.")
         session["user_id"] = user['id']
         session["username"] = user['name']
+        if 'chat_session' not in session:
+            session['chat_session'] = str(uuid.uuid4())
         return redirect(url_for("search"))
     return render_template("login.html")
 
@@ -242,9 +275,11 @@ def chat_page():
 
 @app.route("/chat", methods=["POST"])
 def chat():
+    data = request.get_json()
+    user_message = data.get("message", "")
     context = []
-    if session.get("user_id") is not None:
-    
+    if session.get("user_id"):
+        history = get_chat_history(session["user_id"])
         user_data = database.get_user_movies(session["user_id"])
         for user_movie in user_data:
             media = dict(user_movie)
@@ -252,12 +287,19 @@ def chat():
             genre_ids = database.get_movie_genres(media['id'])
             media['genre_names'] = search_client.genre_ids_to_names(genre_ids)
             context.append(media)
+        history = get_chat_history(session['user_id'])
     else:
         context = None
-    data = request.get_json()
-    user_message = data.get("message", "")
-    response = get_chatbot_response(user_message, context)
+        history = []
+    history.append({'role': 'user', 'message': user_message})
+
+    response = get_chatbot_response(user_message, context, history)
     cleaned = clean_response(response)
+
+    if session.get('user_id'):
+        save_chat_message(session['user_id'], 'user', user_message)
+        save_chat_message(session['user_id'], 'assistant', cleaned)
+
     return jsonify({"response": cleaned})
 
 @app.route("/recommendations")

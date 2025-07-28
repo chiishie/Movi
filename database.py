@@ -61,6 +61,19 @@ class MovieRankerDB:
         )
         """)
 
+        # Chat History table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS chat_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            session_id TEXT,
+            role TEXT NOT NULL,
+            message TEXT NOT NULL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+        """)
+
         conn.commit()
         conn.close()
 
@@ -109,6 +122,7 @@ class MovieRankerDB:
                 return None
             else:
                 return user
+            
     def add_user_movies_by_id(self, user_id, movie_id, rating):
         conn = self.db_connect()
         cursor = conn.cursor()
