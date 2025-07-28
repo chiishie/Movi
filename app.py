@@ -302,7 +302,6 @@ def chat():
 
     return jsonify({"response": cleaned})
 
-
 @app.route("/recommendations")
 def recommendations():
     global recommender
