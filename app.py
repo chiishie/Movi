@@ -82,7 +82,7 @@ def reset_chat_history(user_id, history):
     conn = sqlite3.connect('movie_ranker.db')
     cursor = conn.cursor()
     cursor.execute("""
-    DELETE FROM chat_history WHERE user_id = ? AND session_id = ?""", user_id, session.get('chat_session', history))
+    DELETE FROM chat_history WHERE user_id = ? AND session_id = ?""", (user_id, session.get('chat_session')))
     conn.commit()
     conn.close()
 
@@ -381,8 +381,11 @@ def chat():
     else:
         context = None
         history = []
+    
     history.append({'role': 'user', 'message': user_message})
-
+    # last 10 mssgs
+    if len(history)>10:
+        history = history[-10]
     response = get_chatbot_response(user_message, context, history)
     cleaned = clean_response(response)
 
