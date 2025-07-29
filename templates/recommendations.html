@@ -54,7 +54,7 @@
             </div>
         {% endif %}
         <p style="margin-bottom: -10px;">{{ movie.title }}</p>
-        <p class="rating">&#11088; {{ movie.vote_average }}</p>
+                  <p class="rating">&#11088; {{ movie.vote_average | round(1) }}</p>
     </div>
     {% endfor %}
 </div>
