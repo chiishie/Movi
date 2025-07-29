@@ -3,6 +3,12 @@
 # Exit on any error
 set -e
 
+# Check if virtual environment already exists
+if [ -d "venv" ]; then
+    echo "Virtual environment 'venv' already exists. Removing it..."
+    rm -rf venv
+fi
+
 # Create a virtual environment named 'venv'
 python3 -m venv venv
 
@@ -18,12 +24,12 @@ pip install requests
 pip install python-dotenv
 pip install gunicorn
 pip install google-generativeai
-pip install sklearn
+pip install scikit-learn
 pip install pandas
 pip install joblib
 
 pip freeze > requirements.txt
-echo "=== Dependancies installed in virtual environment 'venv' ==="
+echo "=== Dependencies installed in virtual environment 'venv' ==="
 echo "=== To activate it later, run: source venv/bin/activate ==="
 
 # Deactivate the virtual environment
