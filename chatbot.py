@@ -24,7 +24,7 @@ def get_chatbot_response(user_message, context, history=None):
                 context_str += f"Movie or TV show: {media['title']} \n"
                 context_str += f"Rating: {media['rating']}\n"
                 context_str += f"Genres: {media['genre_names']}\n"
-
+#some change
         history_str = ''
         if history:
             history_str = f'chat history:\n'
